@@ -333,6 +333,11 @@ func (c *Client) ehlo() error {
 	return err
 }
 
+// StartTLS включает TLS после Hello, сохраняя выбранное имя EHLO.
+func (c *Client) StartTLS(config *tls.Config) error {
+	return c.startTLS(config)
+}
+
 // startTLS sends the STARTTLS command and encrypts all further communication.
 // Only servers that advertise the STARTTLS extension support this function.
 //
@@ -831,13 +836,13 @@ func (cmd *DataCommand) CloseWithResponse() (*DataResponse, error) {
 	cmd.client.conn.SetDeadline(time.Now().Add(cmd.client.SubmissionTimeout))
 	defer cmd.client.conn.SetDeadline(time.Time{})
 
-	_, msg, err := cmd.client.readResponse(2)
+	code, msg, err := cmd.client.readResponse(2)
 	if err != nil {
 		cmd.closeErr = err
 		return nil, err
 	}
 
-	return &DataResponse{StatusText: msg}, nil
+	return &DataResponse{Code: code, StatusText: msg}, nil
 }
 
 // CloseWithLMTPResponse is equivalent to Close, but also returns per-recipient
@@ -923,6 +928,8 @@ func (cmd *DataCommand) close() error {
 // DataResponse is the response returned by a DATA command. See
 // DataCommand.CloseWithResponse.
 type DataResponse struct {
+	// Code — точный код ответа на конец DATA.
+	Code int
 	// StatusText is the status text returned by the server. It may contain
 	// tracking information.
 	StatusText string
