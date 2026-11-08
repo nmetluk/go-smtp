@@ -81,7 +81,7 @@ SASL challenges retain the independent size rules of RFC 4954 §4.
 | SMTP-CMD-04 | 4.1.1.9 | MUST | NOOP does nothing and is answered 250. | `TestServer_otherCommands` |
 | SMTP-CMD-05 | 3.5.3, 4.1.1.6 | MUST | VRFY is supported: a server that will not confirm an address answers 252. | `TestServer_otherCommands` |
 | SMTP-CMD-06 | 4.1.1.10 | MUST | QUIT is answered 221 before the connection closes. | `TestServer_otherCommands`, `TestQuitReplySentBeforeClose` |
-| SMTP-CMD-07 | 4.2.4 | MUST | A command the server does not implement is a 502 (tested for EXPN; SEND, SOML, SAML and TURN share the code path). | `TestServer_otherCommands` |
+| SMTP-CMD-07 | 4.2.4 | MUST | A command the server does not implement is a 502 (tested for EXPN; SEND, SOML, SAML and TURN share the code path). | `TestServer_otherCommands`, `TestDisableCHUNKINGRejectsBDAT`, `TestDisableCHUNKINGAfterSTARTTLS` |
 | SMTP-CMD-08 | 4.2.4 | MUST | An unrecognised command is a 500, and the server answers the next command. | `TestServer_tooManyInvalidCommands`, `TestRFC5321_UnknownAndArgumentErrors` |
 | SMTP-CMD-09 | 4.5.1 | MUST | The minimum implementation (EHLO, HELO, MAIL, RCPT, DATA, RSET, NOOP, QUIT, VRFY) is supported. | `TestServer`, `TestServer_helo`, `TestServer_otherCommands` |
 | SMTP-CMD-10 | 4.1.1.9 | SHOULD | A parameter string given with NOOP is ignored: NOOP with or without one is answered 250 and leaves the transaction as it was. | `TestRFC5321_NoopIgnoresParameter` |
@@ -160,7 +160,7 @@ the DATA writer retains the error and refuses further writes or termination.
 | SMTP-CLI-06 | 4.1.1.5 | MUST | A new MAIL starts with no recipients from the one before, and RSET clears them. | `TestClientMailClearsRcpts`, `TestPipelinerMailClearsRcpts`, `TestPipeline_Reset` |
 | SMTP-CLI-07 | 2.2.2 | MUST | The client does not send a MAIL parameter the server did not advertise, or one out of range. | `TestClientMailParamsUnadvertised`, `TestClientMailParamsOutOfRange`, `TestClientMailRequireTLS` |
 | SMTP-CLI-08 | n/a | Normative | The client can tell whether a connection it kept is still healthy before it reuses it. | `TestCheckConn_HealthyPlaintext`, `TestCheckConn_ServerClosedPlaintext`, `TestCheckConn_UnsolicitedData`, `TestCheckConn_BufferedData`, `TestCheckConn_TLS` |
-| SMTP-CLI-09 | 4.2.1, 4.3.2 | MUST | The client acts on the first digit of a reply code only: an unlisted 2yz (such as 252 to VRFY, 251 to MAIL, 299 to RCPT) is success, an unlisted 3yz to DATA is the go-ahead, and an unlisted 4yz or 5yz is an error with that code; the text is not consulted, and an empty text is accepted. Pipelined MAIL and RCPT follow the same rule. | `TestRFC5321_ClientFirstDigitOnly`, `TestRFC5321_ClientFirstDigitFailures`, `TestRFC5321_PipelinerFirstDigitOnly` |
+| SMTP-CLI-09 | 4.2.1, 4.3.2 | MUST | The client acts on the first digit of a reply code only: an unlisted 2yz (such as 252 to VRFY, 251 to MAIL, 299 to RCPT) is success, an unlisted 3yz to DATA is the go-ahead, and an unlisted 4yz or 5yz is an error with that code; the text is not consulted, and an empty text is accepted. Pipelined MAIL and RCPT follow the same rule. | `TestRFC5321_ClientFirstDigitOnly`, `TestRFC5321_ClientFirstDigitFailures`, `TestRFC5321_PipelinerFirstDigitOnly`, `TestDataResponsePreservesCode` |
 | SMTP-CLI-10 | 4.1.1.10, 3.8 | MUST | Quit sends QUIT before it closes the connection, and waits for the reply before closing. | `TestRFC5321_ClientQuitWaitsForReply` |
 | SMTP-CLI-11 | 4.2.1 | MUST | A reply with no text at all (a bare `250` with no space) is acceptable to the client. | n/a: known gap, left for the owner; replies are read with Go's `net/textproto`, which rejects a code line shorter than four characters as "short response". Accepting it needs a reply reader of our own. Senders SHOULD NOT send bare codes (4.2.1), and `250 ` with an empty text is accepted (SMTP-CLI-09). |
 
@@ -251,7 +251,7 @@ commands; a host's relay and submission policy remains outside this library.
 | TLS-POLICY-01 | 4 | MUST NOT | A publicly referenced SMTP server must not require STARTTLS for local delivery; configuring TLS alone permits a plaintext transaction. | `TestRFC3207PlaintextDelivery` |
 | TLS-POLICY-02 | 4 | SHOULD | A private server requiring TLS answers commands other than NOOP, EHLO, STARTTLS and QUIT with 530 (enhanced 5.7.0). | n/a: no library-wide require-TLS mode; AllowInsecureAuth=false protects AUTH only. Host submission policy is separate; see TLS-POLICY-03. |
 | TLS-POLICY-03 | 4 | SHOULD | AUTH protected by the host's TLS policy receives 530 with enhanced status 5.7.0 before TLS. | `TestAuthTLSRequiredCode` |
-| TLS-CLIENT-01 | 4 | MUST | After 220, negotiate TLS before any further SMTP commands; report success only after the handshake and certificate verification complete. | `TestRFC3207ClientUpgrade`, `TestRFC3207ClientHandshakeFailure`, `TestRFC3207ClientHandshakeTimeout`, `TestRFC3207ConstructorsVerifyHandshake` |
+| TLS-CLIENT-01 | 4 | MUST | After 220, negotiate TLS before any further SMTP commands; report success only after the handshake and certificate verification complete. | `TestRFC3207ClientUpgrade`, `TestRFC3207ClientHandshakeFailure`, `TestRFC3207ClientHandshakeTimeout`, `TestRFC3207ConstructorsVerifyHandshake`, `TestPublicStartTLSAfterCustomHello` |
 | TLS-CLIENT-02 | 4.2 | MUST NOT | The client does not attempt STARTTLS while TLS is already active. | `TestRFC3207ClientUpgrade` |
 | TLS-CLIENT-03 | 4 | SHOULD | Abort the connection when a failure prevents a usable TLS handshake; do not resume plaintext SMTP. | `TestRFC3207ClientHandshakeFailure`, `TestRFC3207ClientHandshakeTimeout`, `TestRFC3207ConstructorsVerifyHandshake` |
 | TLS-PIPE-01 | 4 | Normative | STARTTLS is the last command in a pipelined group. | `TestRFC3207StartTLSBetweenGroups` |
@@ -260,7 +260,7 @@ commands; a host's relay and submission policy remains outside this library.
 | TLS-POLICY-06 | 4.1 | SHOULD | A server rejecting an otherwise completed TLS negotiation answers commands other than QUIT with 554. | n/a: not supported yet as a library-wide state; TLSConfig can reject the handshake, and a host backend can reject the subsequent session. |
 | TLS-STATE-01 | 4.2, 6 | MUST | The server resets SMTP state and discards pre-TLS EHLO, authentication, backend session and XCLIENT assertions. | `TestRFC3207ServerDiscardsKnowledge` |
 | TLS-STATE-02 | 4.2, 6 | MUST | The client discards the pre-TLS service extension list and transaction recipients. | `TestRFC3207ClientUpgrade` |
-| TLS-STATE-03 | 4.2 | SHOULD | The client's first SMTP command after a successful negotiation is a fresh EHLO. | `TestRFC3207ClientUpgrade` |
+| TLS-STATE-03 | 4.2 | SHOULD | The client's first SMTP command after a successful negotiation is a fresh EHLO. | `TestRFC3207ClientUpgrade`, `TestPublicStartTLSAfterCustomHello` |
 | TLS-STATE-04 | 4.2 | MUST | Both peers know whether TLS is active and expose the completed negotiation state. | `TestRFC3207ClientUpgrade`, `TestRFC3207ServerDiscardsKnowledge` |
 | TLS-STATE-05 | 4.2 | MUST NOT | The server does not advertise STARTTLS after the TLS handshake. | `TestRFC3207ServerDiscardsKnowledge` |
 | TLS-STATE-06 | 4.2 | MAY | The post-TLS EHLO list may differ from the plaintext one; with AllowInsecureAuth off, AUTH is offered and accepted only over TLS. | `TestRFC3207CapabilitiesChangeAfterTLS` |
@@ -395,11 +395,11 @@ validating the enclosed MIME object remains the caller's responsibility.
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
-| CHUNK-EHLO-01 | 2 | Normative | Advertise parameterless CHUNKING and continue supporting DATA for suitable content. | `TestRFC3030Examples` |
-| CHUNK-EHLO-02 | 3 | Normative | Advertise parameterless BINARYMIME only when enabled, together with CHUNKING. | `TestRFC3030Examples` |
+| CHUNK-EHLO-01 | 2 | Normative | Advertise parameterless CHUNKING and continue supporting DATA for suitable content. | `TestRFC3030Examples`, `TestDisableCHUNKINGCapabilitiesAndMail`, `TestDisableCHUNKINGOverridesCustomCapabilities`, `TestDisableCHUNKINGAfterSTARTTLS` |
+| CHUNK-EHLO-02 | 3 | Normative | Advertise parameterless BINARYMIME only when enabled, together with CHUNKING. | `TestRFC3030Examples`, `TestDisableCHUNKINGCapabilitiesAndMail`, `TestDisableCHUNKINGOverridesCustomCapabilities` |
 | CHUNK-SYNTAX-01 | 2 | Normative | BDAT has a decimal octet count and at most one optional LAST argument; signs, nondecimal counts and extra arguments are rejected. SP/HTAB are accepted separators. | `TestRFC3030Arguments`, `FuzzRFC3030Arguments` |
 | CHUNK-SYNTAX-02 | 2 | Normative | LAST is ASCII and case-insensitive; Unicode look-alikes are not valid markers. | `TestRFC3030Arguments`, `FuzzRFC3030Arguments` |
-| CHUNK-DATA-01 | 2 | MUST | Consume the declared octets immediately after the command and acknowledge each successful chunk with 250. | `TestRFC3030Examples` |
+| CHUNK-DATA-01 | 2 | MUST | Consume the declared octets immediately after the command and acknowledge each successful chunk with 250. | `TestRFC3030Examples`, `TestDefaultCHUNKINGStillDelivers` |
 | CHUNK-DATA-02 | 2, 3 | Normative | Chunk framing counts octets, without dot transparency, line-ending conversion or command-line length restrictions on body bytes. | `TestRFC3030Examples`, `TestRFC3030ReadAheadLimits` |
 | CHUNK-DATA-03 | 2 | Normative | LAST completes one delivery; a zero-length LAST is valid and earlier chunks do not trigger delivery. | `TestRFC3030Examples`, `TestRFC3030NonLastDoesNotDeliver` |
 | CHUNK-DATA-04 | 2 | MUST | Commands between/after chunks remain subject to command line limits, even if a valid body shares the same read buffer. | `TestRFC3030ReadAheadLimits`, `TestServer_Chunking_lineLimitRestoredAfterReset` |
@@ -409,7 +409,7 @@ validating the enclosed MIME object remains the caller's responsibility.
 | CHUNK-ERROR-01 | 2 | MUST | Consume a failed chunk before sending its error, including oversized and out-of-sequence chunks; payload is never interpreted as commands. | `TestRFC3030RejectedChunksAreOpaque`, `TestRFC3030DiscardBeforeReply` |
 | CHUNK-ERROR-02 | 2 | MUST | Accept and discard chunks already pipelined after a failed chunk; RSET recovers the transaction. | `TestRFC3030RejectedChunksAreOpaque` |
 | CHUNK-ERROR-03 | 2 | Normative | A truncated chunk is not delivered or acknowledged as complete; an incomplete discard cannot leave a reusable command stream. | `TestRFC3030TruncatedChunkNotDelivered`, `TestRFC3030DiscardBeforeReply`, `TestRFC3030DiscardTimeoutClosesConnection` |
-| BINARY-BODY-01 | 3 | Normative | Accept BODY=BINARYMIME only when enabled; CHUNKING can also carry 7BIT and 8BITMIME messages. | `TestRFC3030BinaryAndResetRules` |
+| BINARY-BODY-01 | 3 | Normative | Accept BODY=BINARYMIME only when enabled; CHUNKING can also carry 7BIT and 8BITMIME messages. | `TestRFC3030BinaryAndResetRules`, `TestDisableCHUNKINGCapabilitiesAndMail` |
 | BINARY-BODY-02 | 3 | MUST | DATA after BODY=BINARYMIME receives 503; the sender must reset that transaction. | `TestRFC3030BinaryAndResetRules` |
 | BINARY-DATA-01 | 3 | MUST | Preserve all bits in each received BDAT octet through the backend reader, including NUL, high-bit bytes and dot sequences. | `TestRFC3030Examples` |
 | CHUNK-EXAMPLE-01 | 4.1 | Normative | Transfer the RFC's 86-octet bodyless message in one LAST chunk. | `TestRFC3030Examples` |

@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// checklist: CHUNK-EHLO-01 CHUNK-EHLO-02 BINARY-BODY-01
 func TestDisableCHUNKINGCapabilitiesAndMail(t *testing.T) {
 	for _, disabled := range []bool{false, true} {
 		for _, binary := range []bool{false, true} {
@@ -45,6 +46,7 @@ func TestDisableCHUNKINGCapabilitiesAndMail(t *testing.T) {
 	}
 }
 
+// checklist: SMTP-CMD-07
 func TestDisableCHUNKINGRejectsBDAT(t *testing.T) {
 	for _, payload := range []string{"BDAT 0 LAST\r\n", "BDAT 12 LAST\r\nQUIT\r\nNOOP\r\n", "BDAT invalid\r\n"} {
 		t.Run(strings.Split(payload, "\r\n")[0], func(t *testing.T) {
@@ -66,6 +68,7 @@ func TestDisableCHUNKINGRejectsBDAT(t *testing.T) {
 	}
 }
 
+// checklist: CHUNK-DATA-01
 func TestDefaultCHUNKINGStillDelivers(t *testing.T) {
 	delivered := make(chan []byte, 1)
 	_, c, br := newConformanceServer(t, func(s *Server) {
@@ -90,6 +93,8 @@ func TestDefaultCHUNKINGStillDelivers(t *testing.T) {
 type pinmailFeatures struct{ nopBackend }
 
 func (pinmailFeatures) Features(*Conn) []string { return []string{"binarymime", "X-PINMAIL-TEST"} }
+
+// checklist: CHUNK-EHLO-01 CHUNK-EHLO-02
 func TestDisableCHUNKINGOverridesCustomCapabilities(t *testing.T) {
 	_, c, br := newConformanceServer(t, func(s *Server) {
 		s.DisableCHUNKING = true
@@ -117,6 +122,7 @@ func TestDisableCHUNKINGOverridesCustomCapabilities(t *testing.T) {
 	}
 }
 
+// checklist: CHUNK-EHLO-01 SMTP-CMD-07
 func TestDisableCHUNKINGAfterSTARTTLS(t *testing.T) {
 	_, c, br := newConformanceServer(t, func(s *Server) {
 		s.DisableCHUNKING = true

@@ -9,6 +9,7 @@ import (
 	"github.com/rest-mail/go-smtp/pkg/smtp/server"
 )
 
+// checklist: TLS-CLIENT-01 TLS-STATE-03
 func TestPublicStartTLSAfterCustomHello(t *testing.T) {
 	hook := testHookStartTLS
 	testHookStartTLS = nil
@@ -43,6 +44,7 @@ func TestPublicStartTLSAfterCustomHello(t *testing.T) {
 	}
 }
 
+// checklist: SMTP-CLI-09
 func TestDataResponsePreservesCode(t *testing.T) {
 	for _, code := range []int{250, 251, 259} {
 		t.Run(fmt.Sprint(code), func(t *testing.T) {
