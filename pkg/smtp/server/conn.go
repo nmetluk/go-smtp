@@ -564,6 +564,18 @@ func (c *Conn) handleGreet(enhanced bool, arg string) {
 		caps = append(caps, fb.Features(c)...)
 	}
 
+	if c.server.DisableCHUNKING {
+		filtered := caps[:0]
+		for _, capability := range caps {
+			fields := strings.Fields(capability)
+			if len(fields) > 0 && (strings.EqualFold(fields[0], "CHUNKING") || strings.EqualFold(fields[0], "BINARYMIME")) {
+				continue
+			}
+			filtered = append(filtered, capability)
+		}
+		caps = filtered
+	}
+
 	args := []string{greeting}
 	args = append(args, caps...)
 	c.writeResponse(250, smtp.NoEnhancedCode, args...)
@@ -667,7 +679,7 @@ func (c *Conn) handleMail(arg string) {
 			value = strings.ToUpper(value)
 			switch smtp.BodyType(value) {
 			case smtp.BodyBinaryMIME:
-				if !c.server.EnableBINARYMIME {
+				if !c.server.EnableBINARYMIME || c.server.DisableCHUNKING {
 					c.writeResponse(504, smtp.EnhancedCode{5, 5, 4}, "BINARYMIME is not implemented")
 					return
 				}
@@ -1378,6 +1390,12 @@ func (c *Conn) handleData(arg string) {
 }
 
 func (c *Conn) handleBdat(arg string) {
+	if c.server.DisableCHUNKING {
+		c.writeResponse(502, smtp.EnhancedCode{5, 5, 1}, "CHUNKING is disabled")
+		c.closeAfterReplies()
+		return
+	}
+
 	size, last, err := parseBdatArgs(arg)
 	if err != nil {
 		c.writeResponse(501, smtp.EnhancedCode{5, 5, 4}, err.Error())

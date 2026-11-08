@@ -60,6 +60,12 @@ type Server struct {
 	// header interpretation and routing/trust policy belong to the host.
 	EnableREQUIRETLS bool
 
+	// DisableCHUNKING отключает CHUNKING и BINARYMIME, включая ExtraCaps и
+	// FeatureBackend. Имеет приоритет над EnableBINARYMIME. Нулевое значение
+	// сохраняет прежнее поведение. BDAT получает 502 5.5.1 с закрытием соединения,
+	// чтобы непрочитанный payload не стал командами SMTP. Настраивается до Serve.
+	DisableCHUNKING bool
+
 	// Advertise BINARYMIME (RFC 3030) capability.
 	// Enable only when storage, delivery and relay preserve all binary octets.
 	// MIME validation, canonicalization and next-hop conversion are host policy.
