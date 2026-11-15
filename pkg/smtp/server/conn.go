@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/textproto"
+	"os"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -86,7 +87,11 @@ func newConn(c net.Conn, s *Server) *Conn {
 		server: s,
 		conn:   c,
 	}
-	sc.ctx, sc.cancel = context.WithCancel(s.baseContext())
+	if s.SessionTimeout > 0 {
+		sc.ctx, sc.cancel = context.WithTimeout(s.baseContext(), s.SessionTimeout)
+	} else {
+		sc.ctx, sc.cancel = context.WithCancel(s.baseContext())
+	}
 
 	sc.init()
 	return sc
@@ -142,6 +147,10 @@ func (c *Conn) handle(cmd string, arg string) {
 		}
 	}()
 
+	if c.server.RejectCommandControls && (hasControl(cmd) || hasControl(arg)) {
+		c.protocolError(501, smtp.EnhancedCode{5, 5, 2}, "Управляющий символ в команде")
+		return
+	}
 	if cmd == "" {
 		c.protocolError(500, smtp.EnhancedCode{5, 5, 2}, "Error: bad syntax")
 		return
@@ -1229,13 +1238,13 @@ func (c *Conn) handleStartTLS() {
 	// implicit-TLS listener path in Server.handleConn, so a peer that stalls
 	// before or during the handshake cannot block the connection indefinitely.
 	if d := c.server.ReadTimeout; d != 0 {
-		c.conn.SetReadDeadline(time.Now().Add(d))
+		c.setReadDeadline(time.Now().Add(d))
 	}
 	if d := c.server.WriteTimeout; d != 0 {
 		c.conn.SetWriteDeadline(time.Now().Add(d))
 	}
 
-	if err := tlsConn.Handshake(); err != nil {
+	if err := tlsConn.HandshakeContext(c.Context()); err != nil {
 		c.writeResponse(550, smtp.EnhancedCode{5, 0, 0}, "Handshake error")
 		// The connection is in an indeterminate, half-upgraded state; do not
 		// keep serving commands on it.
@@ -1832,8 +1841,19 @@ func (c *Conn) writeResponse(code int, enhCode smtp.EnhancedCode, text ...string
 		}
 	}
 
-	// transform each single line with \n, into separate lines
-	text = strings.Split(strings.Join(text, "\n"), "\n")
+	// В строгом режиме ввод не создаёт новых строк. Остальные приложения
+	// сохраняют поддержку многострочных ответов обработчика.
+	if !c.server.RejectCommandControls {
+		text = strings.Split(strings.Join(text, "\n"), "\n")
+	}
+	for i := range text {
+		text[i] = strings.Map(func(r rune) rune {
+			if r < 32 || r == 127 {
+				return ' '
+			}
+			return r
+		}, text[i])
+	}
 
 	// RFC 2034 §4: the same status code begins the text of every line of a
 	// multiline reply, not only the last.
@@ -1923,7 +1943,7 @@ type deadlineReader struct {
 
 func (dr *deadlineReader) Read(b []byte) (int, error) {
 	if d := dr.c.bodyReadDeadline; d > 0 {
-		dr.c.conn.SetReadDeadline(time.Now().Add(d))
+		dr.c.setReadDeadline(time.Now().Add(d))
 	}
 	return dr.r.Read(b)
 }
@@ -1936,6 +1956,9 @@ func (c *Conn) readLine() (string, error) {
 // readLineLimit reads a line of input no longer than limit octets, including
 // its CRLF; a limit of zero or less means no limit.
 func (c *Conn) readLineLimit(limit int) (string, error) {
+	if deadline, ok := c.ctx.Deadline(); ok && !time.Now().Before(deadline) {
+		return "", os.ErrDeadlineExceeded
+	}
 	// Hold the replies back while the next pipelined command is already here;
 	// send them before waiting on the client for more.
 	if !c.commandBuffered() {
@@ -1945,8 +1968,12 @@ func (c *Conn) readLineLimit(limit int) (string, error) {
 		}
 	}
 
-	if c.server.ReadTimeout != 0 {
-		if err := c.conn.SetReadDeadline(time.Now().Add(c.server.ReadTimeout)); err != nil {
+	if c.server.ReadTimeout != 0 || c.server.SessionTimeout > 0 {
+		deadline := time.Time{}
+		if c.server.ReadTimeout > 0 {
+			deadline = time.Now().Add(c.server.ReadTimeout)
+		}
+		if err := c.setReadDeadline(deadline); err != nil {
 			return "", err
 		}
 	}
@@ -1963,6 +1990,9 @@ func (c *Conn) readLineLimit(limit int) (string, error) {
 			return "", errBareLF
 		}
 		line = line[:len(line)-2]
+	}
+	if c.server.RejectCommandControls && hasControl(line) {
+		return "", errCommandControl
 	}
 	return line, nil
 }
@@ -2019,4 +2049,21 @@ func (c *Conn) reset() {
 	c.fromReceived = false
 	c.utf8 = false
 	c.recipients = nil
+}
+
+var errCommandControl = errors.New("управляющий символ в команде SMTP")
+
+func hasControl(s string) bool {
+	for _, b := range []byte(s) {
+		if b < 32 || b == 127 {
+			return true
+		}
+	}
+	return false
+}
+func (c *Conn) setReadDeadline(deadline time.Time) error {
+	if end, ok := c.ctx.Deadline(); ok && (deadline.IsZero() || end.Before(deadline)) {
+		deadline = end
+	}
+	return c.conn.SetReadDeadline(deadline)
 }

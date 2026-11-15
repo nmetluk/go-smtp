@@ -49,6 +49,10 @@ type Server struct {
 	ErrorLog              Logger
 	ReadTimeout           time.Duration
 	WriteTimeout          time.Duration
+	// SessionTimeout ограничивает всю сессию, включая команды из буфера и STARTTLS. Ноль отключает предел.
+	SessionTimeout time.Duration
+	// RejectCommandControls запрещает управляющие байты в командах; голый LF получает 501.
+	RejectCommandControls bool
 
 	// Advertise SMTPUTF8 (RFC 6531) capability.
 	// Should be used only if backend supports it.
@@ -378,8 +382,20 @@ func (s *Server) handleConn(c *Conn) error {
 				c.writeResponse(500, smtp.EnhancedCode{5, 4, 0}, "Too long line, closing connection")
 				return nil
 			}
+			if err == errCommandControl {
+				c.protocolError(501, smtp.EnhancedCode{5, 5, 2}, "Управляющий символ в команде")
+				c.flush()
+				if c.closing {
+					return nil
+				}
+				continue
+			}
 			if err == errBareLF {
-				c.writeResponse(500, smtp.EnhancedCode{5, 5, 2}, "Bare LF is not a line ending, closing connection")
+				code := 500
+				if s.RejectCommandControls {
+					code = 501
+				}
+				c.writeResponse(code, smtp.EnhancedCode{5, 5, 2}, "Bare LF is not a line ending, closing connection")
 				return nil
 			}
 
